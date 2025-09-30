@@ -1,0 +1,98 @@
+﻿<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>CareNotes 护理记录</title>
+</head>
+<body style="font-family: Arial, 'Microsoft YaHei', sans-serif; margin: 20px;">
+    <div style="width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 12px;">
+            <span style="font-size: 20px;">CareNotes 护理记录</span>
+            <span style="font-size: 14px;">生成时间：{{ generated_at }}</span>
+        </div>
+
+        <div style="border: 1px solid #333; padding: 8px; margin-bottom: 12px; font-weight: bold;">
+            <div>姓名：{{ patient.name or '—' }} ｜ 性别：{{ patient.gender or '—' }} ｜ 生日：{{ patient.dob or '—' }} ｜ MRN：{{ patient.mrn or '—' }} ｜ 病区：{{ patient.ward or '—' }} ｜ 床号：{{ patient.bed or '—' }} ｜ 就诊号：{{ note.encounter_id or '—' }}</div>
+        </div>
+
+        <div style="border: 1px solid #333; padding: 8px; margin-bottom: 12px;">
+            <div style="font-weight: bold; margin-bottom: 6px;">Vitals</div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <th style="border: 1px solid #333; padding: 6px;">Temp (°C)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">HR (bpm)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">RR (bpm)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">BP (S/D mmHg)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">SpO₂ (%)</th>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #333; padding: 6px; text-align: center; font-weight: bold;">{{ vitals.temp }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; text-align: center; font-weight: bold;">{{ vitals.hr }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; text-align: center; font-weight: bold;">{{ vitals.rr }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; text-align: center; font-weight: bold;">{{ vitals.bp_sys }}/{{ vitals.bp_dia }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; text-align: center; font-weight: bold;">{{ vitals.spo2 }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <div style="flex: 1; border: 1px solid #333; padding: 8px; font-weight: bold;">
+                <div style="margin-bottom: 6px;">Intake (ml)</div>
+                <div style="font-size: 18px;">{{ intake }}</div>
+            </div>
+            <div style="flex: 1; border: 1px solid #333; padding: 8px; font-weight: bold;">
+                <div style="margin-bottom: 6px;">Output (ml)</div>
+                <div style="font-size: 18px;">{{ output }}</div>
+            </div>
+            <div style="flex: 1; border: 1px solid #333; padding: 8px; font-weight: bold;">
+                <div style="margin-bottom: 6px;">Pain 0–10</div>
+                <div style="font-size: 18px;">{{ pain }}</div>
+            </div>
+        </div>
+
+        <div style="border: 1px solid #333; padding: 8px; margin-bottom: 12px;">
+            <div style="font-weight: bold; margin-bottom: 6px;">SOAP</div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); grid-gap: 8px;">
+                <div style="border: 1px solid #333; padding: 6px; font-weight: bold;">S：{{ subjective }}</div>
+                <div style="border: 1px solid #333; padding: 6px; font-weight: bold;">O：{{ objective }}</div>
+                <div style="border: 1px solid #333; padding: 6px; font-weight: bold;">A：{{ assessment }}</div>
+                <div style="border: 1px solid #333; padding: 6px; font-weight: bold;">P：{{ plan }}</div>
+            </div>
+        </div>
+
+        <div style="border: 1px solid #333; padding: 8px; margin-bottom: 12px;">
+            <div style="font-weight: bold; margin-bottom: 6px;">Medications</div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <th style="border: 1px solid #333; padding: 6px;">Name</th>
+                    <th style="border: 1px solid #333; padding: 6px;">Dose</th>
+                    <th style="border: 1px solid #333; padding: 6px;">Route</th>
+                    <th style="border: 1px solid #333; padding: 6px;">Time</th>
+                </tr>
+                {% for med in medications %}
+                <tr>
+                    <td style="border: 1px solid #333; padding: 6px; font-weight: bold;">{{ med.name }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; font-weight: bold;">{{ med.dose }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; font-weight: bold;">{{ med.route }}</td>
+                    <td style="border: 1px solid #333; padding: 6px; font-weight: bold;">{{ med.time }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+
+        <div style="border: 1px solid #333; padding: 8px; margin-bottom: 12px; font-weight: bold;">
+            <div style="margin-bottom: 6px;">Alerts</div>
+            <ul style="margin: 0; padding-left: 20px;">
+                {% for alert in alerts %}
+                <li style="font-weight: bold;">{{ alert }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; border: 1px solid #333; padding: 8px; font-weight: bold;">
+            <div>护士签名：__________________</div>
+            <div>时间：__________________</div>
+        </div>
+    </div>
+</body>
+</html>

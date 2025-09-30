@@ -1,0 +1,363 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareNotes 记录</title>
+    <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+    <main>
+        <section class="card">
+            <header class="top-bar">
+                <div>
+                    <h1>护理记录</h1>
+                    <p id="patient-meta"></p>
+                </div>
+                <div class="button-row">
+                    <button id="btn-record-start">开始录音</button>
+                    <button id="btn-record-stop" class="secondary">停止录音</button>
+                    <button id="btn-parse" class="secondary">结构化抽取</button>
+                    <button id="btn-save" class="secondary">保存</button>
+                    <button id="btn-download" class="secondary" style="display:none;">下载PDF</button>
+                </div>
+            </header>
+        </section>
+
+        <section class="card">
+            <h2>口述转写</h2>
+            <textarea id="transcript" placeholder="录音或手动输入护理记录文本"></textarea>
+        </section>
+
+        <section class="card">
+            <h2>结构化信息</h2>
+            <div class="grid-two">
+                <label>Temp (°C)
+                    <input type="number" step="0.1" id="vital-temp">
+                </label>
+                <label>HR (bpm)
+                    <input type="number" id="vital-hr">
+                </label>
+                <label>RR (bpm)
+                    <input type="number" id="vital-rr">
+                </label>
+                <label>BP Sys (mmHg)
+                    <input type="number" id="vital-bp-sys">
+                </label>
+                <label>BP Dia (mmHg)
+                    <input type="number" id="vital-bp-dia">
+                </label>
+                <label>SpO₂ (%)
+                    <input type="number" id="vital-spo2">
+                </label>
+                <label>Pain 0-10
+                    <input type="number" min="0" max="10" id="pain-score">
+                </label>
+                <label>Intake (ml)
+                    <input type="number" id="intake-ml">
+                </label>
+                <label>Output (ml)
+                    <input type="number" id="output-ml">
+                </label>
+                <label>签名完成
+                    <input type="checkbox" id="signed-flag">
+                </label>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>SOAP</h2>
+            <div class="grid-two">
+                <label>S 主观
+                    <textarea id="soap-s"></textarea>
+                </label>
+                <label>O 客观
+                    <textarea id="soap-o"></textarea>
+                </label>
+                <label>A 评估
+                    <textarea id="soap-a"></textarea>
+                </label>
+                <label>P 计划
+                    <textarea id="soap-p"></textarea>
+                </label>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>药品给药</h2>
+            <div id="medications"></div>
+            <button id="add-med" type="button" class="secondary">添加用药</button>
+        </section>
+
+        <section class="card">
+            <h2>Alerts</h2>
+            <textarea id="alerts-text" placeholder="每行一条警报"></textarea>
+        </section>
+    </main>
+
+    <script type="module">
+        import { isAuthed } from './assets/js/auth.js';
+        import { get, post, download } from './assets/js/api.js';
+        import { startRecording, stopRecording, isRecording } from './assets/js/recorder.js';
+        import { toast } from './assets/js/ui.js';
+
+        if (!isAuthed()) {
+            window.location.href = 'index.html';
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const patientId = params.get('patient');
+        const noteId = params.get('note');
+        const patientMeta = document.getElementById('patient-meta');
+        const transcriptEl = document.getElementById('transcript');
+        const btnStart = document.getElementById('btn-record-start');
+        const btnStop = document.getElementById('btn-record-stop');
+        const btnParse = document.getElementById('btn-parse');
+        const btnSave = document.getElementById('btn-save');
+        const btnDownload = document.getElementById('btn-download');
+        const addMedBtn = document.getElementById('add-med');
+        const medsContainer = document.getElementById('medications');
+        const alertsText = document.getElementById('alerts-text');
+
+        const vitalIds = {
+            temp: document.getElementById('vital-temp'),
+            hr: document.getElementById('vital-hr'),
+            rr: document.getElementById('vital-rr'),
+            bp_sys: document.getElementById('vital-bp-sys'),
+            bp_dia: document.getElementById('vital-bp-dia'),
+            spo2: document.getElementById('vital-spo2'),
+        };
+        const intakeEl = document.getElementById('intake-ml');
+        const outputEl = document.getElementById('output-ml');
+        const painEl = document.getElementById('pain-score');
+        const signedFlag = document.getElementById('signed-flag');
+        const soap = {
+            subjective: document.getElementById('soap-s'),
+            objective: document.getElementById('soap-o'),
+            assessment: document.getElementById('soap-a'),
+            plan: document.getElementById('soap-p'),
+        };
+
+        if (!patientId) {
+            toast('缺少 patient 参数', 'error');
+            setTimeout(() => (window.location.href = 'patient.html'), 1000);
+        }
+
+        async function init() {
+            try {
+                const res = await get(`/patients/${patientId}`);
+                const patient = res.data;
+                patientMeta.textContent = `${patient.name} ｜ MRN：${patient.mrn || '—'} ｜ 病区：${patient.ward || '—'} ｜ 床号：${patient.bed || '—'}`;
+            } catch (err) {
+                toast('加载患者失败', 'error');
+            }
+
+            if (noteId) {
+                try {
+                    const res = await get(`/notes/${noteId}`);
+                    fillFromNote(res.data);
+                    btnDownload.style.display = 'inline-flex';
+                    btnDownload.dataset.noteId = noteId;
+                } catch (err) {
+                    toast('加载记录失败', 'error');
+                }
+            }
+
+            if (!medsContainer.children.length) {
+                for (let i = 0; i < 3; i += 1) {
+                    addMedicationRow();
+                }
+            }
+        }
+
+        btnStart.addEventListener('click', async () => {
+            try {
+                await startRecording();
+                toast('开始录音', 'success');
+            } catch (err) {
+                toast('无法启动录音', 'error');
+            }
+        });
+
+        btnStop.addEventListener('click', async () => {
+            if (!isRecording()) {
+                toast('当前未录音', 'info');
+                return;
+            }
+            try {
+                const blob = await stopRecording();
+                const form = new FormData();
+                form.append('file', blob, 'audio.webm');
+                const res = await post('/notes/transcribe', form, { multipart: true });
+                transcriptEl.value = res.data.text;
+                toast('转写完成', 'success');
+            } catch (err) {
+                toast(err.message || '转写失败', 'error');
+            }
+        });
+
+        btnParse.addEventListener('click', async () => {
+            const text = transcriptEl.value.trim();
+            if (!text) {
+                toast('无可解析文本', 'info');
+                return;
+            }
+            try {
+                const res = await post('/notes/parse', { text });
+                populateStructured(res.data);
+                toast('结构化完成', 'success');
+            } catch (err) {
+                toast(err.message || '解析失败', 'error');
+            }
+        });
+
+        btnSave.addEventListener('click', async () => {
+            try {
+                const payload = buildPayload();
+                const res = await post('/notes', payload);
+                toast('保存成功', 'success');
+                btnDownload.style.display = 'inline-flex';
+                btnDownload.dataset.noteId = res.data.id;
+            } catch (err) {
+                toast(err.message || '保存失败', 'error');
+            }
+        });
+
+        btnDownload.addEventListener('click', async () => {
+            const id = btnDownload.dataset.noteId;
+            if (!id) return;
+            try {
+                const blob = await download(`/export/notes/${id}`);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `note_${id}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                toast('下载失败', 'error');
+            }
+        });
+
+        addMedBtn.addEventListener('click', () => addMedicationRow());
+
+        function addMedicationRow(med = {}) {
+            const row = document.createElement('div');
+            row.className = 'grid-two med-row';
+            row.innerHTML = `
+                <label>药名<input type="text" value="${med.name || ''}" data-field="name"></label>
+                <label>剂量<input type="text" value="${med.dose || ''}" data-field="dose"></label>
+                <label>途径<input type="text" value="${med.route || ''}" data-field="route"></label>
+                <label>时间<input type="datetime-local" value="${toLocalInput(med.time) || ''}" data-field="time"></label>
+            `;
+            medsContainer.appendChild(row);
+        }
+
+        function toLocalInput(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            const offset = date.getTimezoneOffset();
+            const local = new Date(date.getTime() - offset * 60000);
+            return local.toISOString().slice(0, 16);
+        }
+
+        function fromLocalInput(value) {
+            if (!value) return null;
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return null;
+            return date.toISOString();
+        }
+
+        function populateStructured(data) {
+            const vitals = data.vitals || {};
+            Object.entries(vitals).forEach(([key, value]) => {
+                if (vitalIds[key]) {
+                    vitalIds[key].value = value ?? '';
+                }
+            });
+            painEl.value = data.pain_score ?? '';
+            intakeEl.value = data.intake_ml ?? '';
+            outputEl.value = data.output_ml ?? '';
+            soap.subjective.value = data.subjective || '';
+            soap.objective.value = data.objective || '';
+            soap.assessment.value = data.assessment || '';
+            soap.plan.value = data.plan || '';
+
+            medsContainer.innerHTML = '';
+            (data.med_given || []).forEach((med) => addMedicationRow(med));
+            if (!medsContainer.children.length) {
+                addMedicationRow();
+            }
+            alertsText.value = (data.alerts || []).join('\n');
+        }
+
+        function buildPayload() {
+            const vitals = Object.fromEntries(
+                Object.entries(vitalIds).map(([key, el]) => [key, toNumber(el.value)])
+            );
+            const meds = Array.from(medsContainer.querySelectorAll('.med-row')).map((row) => {
+                const med = {};
+                row.querySelectorAll('input').forEach((input) => {
+                    const field = input.dataset.field;
+                    med[field] = field === 'time' ? fromLocalInput(input.value) : input.value.trim();
+                });
+                return med;
+            }).filter((med) => med.name || med.dose || med.route || med.time);
+
+            const alerts = alertsText.value
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean);
+
+            return {
+                patient_id: patientId,
+                encounter_id: params.get('encounter'),
+                vitals,
+                pain_score: toNumber(painEl.value),
+                intake_ml: toNumber(intakeEl.value),
+                output_ml: toNumber(outputEl.value),
+                subjective: soap.subjective.value.trim(),
+                objective: soap.objective.value.trim(),
+                assessment: soap.assessment.value.trim(),
+                plan: soap.plan.value.trim(),
+                med_given: meds,
+                alerts,
+                transcript: transcriptEl.value.trim(),
+                signed: signedFlag.checked,
+            };
+        }
+
+        function fillFromNote(note) {
+            transcriptEl.value = note.transcript || '';
+            Object.entries(note.vitals || {}).forEach(([key, value]) => {
+                if (vitalIds[key]) {
+                    vitalIds[key].value = value ?? '';
+                }
+            });
+            painEl.value = note.pain_score ?? '';
+            intakeEl.value = note.intake_ml ?? '';
+            outputEl.value = note.output_ml ?? '';
+            soap.subjective.value = note.subjective || '';
+            soap.objective.value = note.objective || '';
+            soap.assessment.value = note.assessment || '';
+            soap.plan.value = note.plan || '';
+            signedFlag.checked = Boolean(note.signed);
+            medsContainer.innerHTML = '';
+            (note.med_given || []).forEach((med) => addMedicationRow(med));
+            if (!medsContainer.children.length) {
+                addMedicationRow();
+            }
+            alertsText.value = (note.alerts || []).join('\n');
+        }
+
+        function toNumber(value) {
+            const num = Number(value);
+            return Number.isNaN(num) ? null : num;
+        }
+
+        init();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,13 @@
+﻿flask
+flask-cors
+flask_sqlalchemy
+SQLAlchemy
+PyMySQL
+python-dotenv
+pydantic
+requests
+openai>=1.40.0
+Jinja2
+weasyprint
+tenacity
+PyJWT

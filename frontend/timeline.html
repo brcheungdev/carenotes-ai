@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareNotes 时间线</title>
+    <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+    <main>
+        <section class="card">
+            <header class="top-bar">
+                <div class="patient-info" id="patient-info"></div>
+                <div class="button-row">
+                    <button id="back-btn" class="secondary">返回患者页</button>
+                </div>
+            </header>
+        </section>
+
+        <section class="card filter-panel">
+            <div class="controls">
+                <label>开始日期
+                    <input type="date" id="filter-from">
+                </label>
+                <label>结束日期
+                    <input type="date" id="filter-to">
+                </label>
+                <label>
+                    <input type="checkbox" id="filter-alerts"> 仅显示有 Alerts
+                </label>
+                <label>
+                    <input type="checkbox" id="filter-signed"> 仅显示签名记录
+                </label>
+            </div>
+            <button id="apply-filter">应用筛选</button>
+        </section>
+
+        <section class="card">
+            <div id="timeline" class="timeline"></div>
+        </section>
+    </main>
+
+    <script type="module">
+        import { isAuthed } from './assets/js/auth.js';
+        import { get, download } from './assets/js/api.js';
+        import { toast } from './assets/js/ui.js';
+
+        if (!isAuthed()) {
+            window.location.href = 'index.html';
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const patientId = params.get('patient');
+
+        const patientInfoEl = document.getElementById('patient-info');
+        const backBtn = document.getElementById('back-btn');
+        const timelineEl = document.getElementById('timeline');
+        const filterFrom = document.getElementById('filter-from');
+        const filterTo = document.getElementById('filter-to');
+        const filterAlerts = document.getElementById('filter-alerts');
+        const filterSigned = document.getElementById('filter-signed');
+        const applyFilterBtn = document.getElementById('apply-filter');
+
+        let rawNotes = [];
+        let patient = null;
+
+        backBtn.addEventListener('click', () => {
+            window.location.href = `patient.html#${patientId}`;
+        });
+
+        applyFilterBtn.addEventListener('click', () => {
+            renderTimeline();
+        });
+
+        async function loadData() {
+            try {
+                const res = await get(`/patients/${patientId}/notes`);
+                patient = res.data.patient;
+                rawNotes = res.data.notes;
+                renderPatient();
+                renderTimeline();
+            } catch (err) {
+                toast(err.message || '加载时间线失败', 'error');
+            }
+        }
+
+        function renderPatient() {
+            patientInfoEl.innerHTML = `
+                <strong>${patient.name}</strong>
+                <span>MRN：${patient.mrn || '—'} ｜ 病区：${patient.ward || '—'} ｜ 床号：${patient.bed || '—'}</span>
+            `;
+        }
+
+        function renderTimeline() {
+            timelineEl.innerHTML = '';
+            let notes = rawNotes.slice();
+            const fromValue = filterFrom.value ? new Date(filterFrom.value) : null;
+            const toValue = filterTo.value ? new Date(filterTo.value) : null;
+
+            notes = notes.filter((note) => {
+                const created = new Date(note.created_at);
+                if (Number.isNaN(created.getTime())) {
+                    return true;
+                }
+                if (fromValue && created < fromValue) {
+                    return false;
+                }
+                if (toValue) {
+                    const inclusive = new Date(toValue.getTime() + 24 * 60 * 60 * 1000);
+                    if (created > inclusive) {
+                        return false;
+                    }
+                }
+                if (filterAlerts.checked && !(note.alerts && note.alerts.length)) {
+                    return false;
+                }
+                if (filterSigned.checked && !note.signed) {
+                    return false;
+                }
+                return true;
+            });
+
+            if (!notes.length) {
+                const empty = document.createElement('div');
+                empty.className = 'card';
+                empty.innerHTML = `
+                    <p>暂无记录</p>
+                    <button id="go-record">去录入一条</button>
+                `;
+                timelineEl.appendChild(empty);
+                empty.querySelector('#go-record').addEventListener('click', () => {
+                    window.location.href = `record.html?patient=${patientId}`;
+                });
+                return;
+            }
+
+            notes.forEach((note) => {
+                const card = document.createElement('article');
+                card.className = 'card timeline-card';
+
+                const header = document.createElement('header');
+                header.innerHTML = `
+                    <div>
+                        <strong>${formatDate(note.created_at)}</strong>
+                    </div>
+                    <div class="flex-row"></div>
+                `;
+                const badgeHolder = header.querySelector('.flex-row');
+                if (note.alerts && note.alerts.length) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge alert';
+                    badge.textContent = '[ALERTS]';
+                    badgeHolder.appendChild(badge);
+                }
+                if (note.signed) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge';
+                    badge.textContent = '[SIGNED]';
+                    badgeHolder.appendChild(badge);
+                }
+
+                const summary = document.createElement('div');
+                summary.className = 'summary';
+                const vitals = note.vitals || {};
+                summary.innerHTML = `
+                    <span>Temp<br>${display(vitals.temp)}</span>
+                    <span>HR<br>${display(vitals.hr)}</span>
+                    <span>RR<br>${display(vitals.rr)}</span>
+                    <span>BP(S/D)<br>${vitals.bp_sys && vitals.bp_dia ? `${vitals.bp_sys}/${vitals.bp_dia}` : '—'}</span>
+                    <span>SpO?<br>${display(vitals.spo2)}</span>
+                    <span>Pain<br>${display(note.pain_score)}</span>
+                    <span>I/O (ml)<br>${display(note.intake_ml)}/${display(note.output_ml)}</span>
+                `;
+
+                const soap = document.createElement('p');
+                soap.innerHTML = `S: ${truncate(note.subjective)}<br>O: ${truncate(note.objective)}<br>A: ${truncate(note.assessment)}<br>P: ${truncate(note.plan)}`;
+
+                const actions = document.createElement('div');
+                actions.className = 'button-row';
+                const viewBtn = document.createElement('button');
+                viewBtn.textContent = '查看详情';
+                viewBtn.addEventListener('click', () => {
+                    window.location.href = `record.html?patient=${note.patient_id}&note=${note.id}`;
+                });
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = '下载PDF';
+                downloadBtn.className = 'secondary';
+                downloadBtn.addEventListener('click', async () => {
+                    try {
+                        const blob = await download(`/export/notes/${note.id}`);
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `note_${note.id}.pdf`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    } catch (err) {
+                        toast('下载失败', 'error');
+                    }
+                });
+                actions.append(viewBtn, downloadBtn);
+
+                card.append(header, summary, soap, actions);
+                timelineEl.appendChild(card);
+            });
+        }
+
+        function display(value) {
+            return value === null || value === undefined || value === '' ? '—' : value;
+        }
+
+        function truncate(text) {
+            if (!text) return '—';
+            const str = String(text);
+            return str.length > 60 ? `${str.slice(0, 60)}…` : str;
+        }
+
+        function formatDate(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return value;
+            }
+            return date.toLocaleString();
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,128 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareNotes 患者</title>
+    <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+    <main>
+        <section class="card">
+            <header class="top-bar">
+                <h1>患者中心</h1>
+                <div class="button-row">
+                    <button id="logout">退出登录</button>
+                </div>
+            </header>
+        </section>
+
+        <section class="card">
+            <h2>创建患者</h2>
+            <form id="create-form">
+                <div class="grid-two">
+                    <label>姓名
+                        <input type="text" name="name" required>
+                    </label>
+                    <label>性别
+                        <input type="text" name="gender" placeholder="男/女">
+                    </label>
+                    <label>生日
+                        <input type="date" name="dob">
+                    </label>
+                    <label>MRN
+                        <input type="text" name="mrn">
+                    </label>
+                    <label>病区
+                        <input type="text" name="ward">
+                    </label>
+                    <label>床号
+                        <input type="text" name="bed">
+                    </label>
+                </div>
+                <button type="submit">创建患者</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>查找患者</h2>
+            <form id="lookup-form" class="button-row">
+                <label>患者 ID
+                    <input type="text" name="patientId" required>
+                </label>
+                <button type="submit">加载</button>
+            </form>
+            <div id="patient-details"></div>
+        </section>
+    </main>
+
+    <script type="module">
+        import { logout, isAuthed } from './assets/js/auth.js';
+        import { get, post } from './assets/js/api.js';
+        import { toast } from './assets/js/ui.js';
+
+        if (!isAuthed()) {
+            window.location.href = 'index.html';
+        }
+
+        const logoutBtn = document.getElementById('logout');
+        logoutBtn.addEventListener('click', () => {
+            logout();
+            window.location.href = 'index.html';
+        });
+
+        const createForm = document.getElementById('create-form');
+        const lookupForm = document.getElementById('lookup-form');
+        const details = document.getElementById('patient-details');
+
+        createForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const data = Object.fromEntries(new FormData(createForm));
+            try {
+                const result = await post('/patients', data);
+                const patient = result.data;
+                toast('创建成功', 'success');
+                renderPatient(patient);
+                createForm.reset();
+            } catch (err) {
+                toast(err.message || '创建失败', 'error');
+            }
+        });
+
+        lookupForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const patientId = new FormData(lookupForm).get('patientId');
+            try {
+                const result = await get(`/patients/${patientId}`);
+                renderPatient(result.data);
+            } catch (err) {
+                toast(err.message || '加载失败', 'error');
+            }
+        });
+
+        function renderPatient(patient) {
+            if (!patient) {
+                details.innerHTML = '';
+                return;
+            }
+            details.innerHTML = `
+                <div class="card">
+                    <h3>${patient.name} (#${patient.id})</h3>
+                    <p>性别：${patient.gender || '—'} ｜ 生日：${patient.dob || '—'}</p>
+                    <p>MRN：${patient.mrn || '—'} ｜ 病区：${patient.ward || '—'} ｜ 床号：${patient.bed || '—'}</p>
+                    <div class="button-row">
+                        <button id="to-record">进入记录</button>
+                        <button id="to-timeline" class="secondary">查看时间线</button>
+                    </div>
+                </div>
+            `;
+            details.querySelector('#to-record').addEventListener('click', () => {
+                window.location.href = `record.html?patient=${patient.id}`;
+            });
+            details.querySelector('#to-timeline').addEventListener('click', () => {
+                window.location.href = `timeline.html?patient=${patient.id}`;
+            });
+        }
+    </script>
+</body>
+</html>

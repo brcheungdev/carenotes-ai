@@ -1,0 +1,55 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareNotes 登录</title>
+    <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+    <main>
+        <section>
+            <h1>CareNotes</h1>
+            <p>护士口述 → 结构化 → PDF → 时间线</p>
+        </section>
+
+        <section>
+            <h2>登录</h2>
+            <form id="login-form">
+                <label>用户名
+                    <input type="text" name="username" required autocomplete="username">
+                </label>
+                <label>密码
+                    <input type="password" name="password" required autocomplete="current-password">
+                </label>
+                <button type="submit">登录</button>
+            </form>
+        </section>
+    </main>
+
+    <script type="module">
+        import { login, isAuthed } from './assets/js/auth.js';
+        import { toast } from './assets/js/ui.js';
+
+        const form = document.getElementById('login-form');
+
+        if (isAuthed()) {
+            window.location.href = 'patient.html';
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(form);
+            const username = formData.get('username');
+            const password = formData.get('password');
+            try {
+                await login(username, password);
+                toast('登录成功', 'success');
+                window.location.href = 'patient.html';
+            } catch (err) {
+                toast(err.message || '登录失败', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

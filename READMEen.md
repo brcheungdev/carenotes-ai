@@ -1,5 +1,6 @@
 # CareNotes AI
 [中文](README.md)
+
 **Version: v0.1.0 (MVP)**  
 **CareNotes AI — An AI-powered assistant for nurses that turns spoken or handwritten notes into structured, auditable care records. Features timeline view and PDF export.**  
 **CareNotes AI —— AI 助力的护理助手，能将口述或手写笔记快速转化为结构化护理记录，支持时间线视图和 PDF 导出功能。**

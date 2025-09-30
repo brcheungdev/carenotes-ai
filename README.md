@@ -3,6 +3,7 @@ CareNotes AI — AI-powered nursing assistant that transforms voice and text not
 # CareNotes AI
 
 版本：v0.1.0（MVP）
+[English](READMEen.md)
 
 ## 项目背景与愿景
 
